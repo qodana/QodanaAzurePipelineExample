@@ -1,0 +1,125 @@
+# PR-triggered fixture pipeline for QodanaScan E2E tests — prMode scenarios.
+#
+# Triggered automatically when pr-fixture/* branches target master.
+# Build.Reason=PullRequest and System.PullRequest.* are set by Azure, which activates
+# task behaviors only available in PR context (warnIfMergeCommitCheckout, --commit sha,
+# postPrComment, pushFixes). Each job covers one fixed test scenario.
+#
+# To re-trigger without changing the PR: push a trivial commit to pr-fixture/qodana-test
+# via the GitHub API. All jobs run in parallel — one PR push covers all PR scenarios.
+#
+# QODANA_TOKEN must be configured as a secret variable on this pipeline.
+
+pr:
+  branches:
+    include:
+      - master
+
+trigger: none
+
+jobs:
+  # D-3: prMode=true on PR — task appends --commit <sha> from merge-base
+  - job: D3_prMode_true
+    displayName: "D-3: prMode=true (default) on PR"
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        displayName: Qodana Scan
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          args: "--log-level debug"
+
+  # D-4: prMode=false on PR — no PR-specific args even with PullRequest trigger
+  - job: D4_prMode_false
+    displayName: "D-4: prMode=false on PR"
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        displayName: Qodana Scan
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "false"
+          args: "--log-level debug"
+
+  # D-6: merge-commit warning — no explicit source commit checkout, default checkout=merge commit
+  - job: D6_merge_commit_warning
+    displayName: "D-6: merge-commit checkout warning"
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      # Intentionally NO "git checkout $(System.PullRequest.SourceCommitId)" step here.
+      # The task detects the merge commit and emits warnIfMergeCommitCheckout.
+      - task: QodanaScan@2026
+        displayName: Qodana Scan
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          args: "--log-level debug"
+
+  # E-1: postPrComment=true — task posts a summary comment to the PR
+  - job: E1_post_pr_comment
+    displayName: "E-1: postPrComment=true"
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        displayName: Qodana Scan
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          postPrComment: "true"
+          args: "--log-level debug"
+
+  # E-2: postPrComment=false — no comment posted to the PR
+  - job: E2_no_pr_comment
+    displayName: "E-2: postPrComment=false"
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        displayName: Qodana Scan
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          postPrComment: "false"
+          args: "--log-level debug"
+
+  # F-1: pushFixes=none (default) — no commits pushed to the branch
+  - job: F1_push_fixes_none
+    displayName: "F-1: pushFixes=none (default)"
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        displayName: Qodana Scan
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          pushFixes: "none"
+          args: "--apply-fixes --log-level debug"

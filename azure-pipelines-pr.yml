@@ -1,14 +1,11 @@
-# PR-triggered fixture pipeline for QodanaScan E2E tests — prMode scenarios.
+# PR-triggered fixture pipeline for QodanaScan E2E tests — prMode / pushFixes scenarios.
 #
-# Triggered automatically when pr-fixture/* branches target master.
-# Build.Reason=PullRequest and System.PullRequest.* are set by Azure, which activates
-# task behaviors only available in PR context (warnIfMergeCommitCheckout, --commit sha,
-# postPrComment, pushFixes). Each job covers one fixed test scenario.
-#
-# To re-trigger without changing the PR: push a trivial commit to pr-fixture/qodana-test
-# via the GitHub API. All jobs run in parallel — one PR push covers all PR scenarios.
+# Triggered automatically when any pr-fixture/* branch targets master.
+# Each job has a `condition` on System.PullRequest.SourceBranch so only the job
+# matching the specific fixture branch runs — prevents cross-test interference.
 #
 # QODANA_TOKEN must be configured as a secret variable on this pipeline.
+# persistCredentials: true enables postPrComment and pushFixes git operations.
 
 pr:
   branches:
@@ -18,9 +15,12 @@ pr:
 trigger: none
 
 jobs:
-  # D-3: prMode=true on PR — task appends --commit <sha> from merge-base
+  # ── prMode analysis scope ──────────────────────────────────────────────
+
+  # D3: prMode=true (default) — triggered from pr-fixture/qodana-test
   - job: D3_prMode_true
     displayName: "D-3: prMode=true (default) on PR"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/qodana-test')
     pool:
       vmImage: ubuntu-latest
     steps:
@@ -28,16 +28,32 @@ jobs:
         fetchDepth: 0
         persistCredentials: true
       - task: QodanaScan@2026
-        displayName: Qodana Scan
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          args: "--log-level debug"
+
+  # D3 explicit: prMode=true explicitly set
+  - job: D3_pr_mode_true_explicit
+    displayName: "D-3: prMode=true (explicit)"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/qodana-test')
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
         env:
           QODANA_TOKEN: $(QODANA_TOKEN)
         inputs:
           prMode: "true"
           args: "--log-level debug"
 
-  # D-4: prMode=false on PR — no PR-specific args even with PullRequest trigger
+  # D4: prMode=false — full project analysis, no --commit in command
   - job: D4_prMode_false
     displayName: "D-4: prMode=false on PR"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/qodana-test')
     pool:
       vmImage: ubuntu-latest
     steps:
@@ -45,35 +61,35 @@ jobs:
         fetchDepth: 0
         persistCredentials: true
       - task: QodanaScan@2026
-        displayName: Qodana Scan
         env:
           QODANA_TOKEN: $(QODANA_TOKEN)
         inputs:
           prMode: "false"
           args: "--log-level debug"
 
-  # D-6: merge-commit warning — no explicit source commit checkout, default checkout=merge commit
+  # D6: merge-commit checkout warning (no explicit source commit checkout)
   - job: D6_merge_commit_warning
     displayName: "D-6: merge-commit checkout warning"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/qodana-test')
     pool:
       vmImage: ubuntu-latest
     steps:
       - checkout: self
         fetchDepth: 0
         persistCredentials: true
-      # Intentionally NO "git checkout $(System.PullRequest.SourceCommitId)" step here.
-      # The task detects the merge commit and emits warnIfMergeCommitCheckout.
       - task: QodanaScan@2026
-        displayName: Qodana Scan
         env:
           QODANA_TOKEN: $(QODANA_TOKEN)
         inputs:
           prMode: "true"
           args: "--log-level debug"
 
-  # E-1: postPrComment=true — task posts a summary comment to the PR
+  # ── postPrComment ──────────────────────────────────────────────────────
+
+  # E1: postPrComment=true (default) — comment posted
   - job: E1_post_pr_comment
     displayName: "E-1: postPrComment=true"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/qodana-test')
     pool:
       vmImage: ubuntu-latest
     steps:
@@ -81,7 +97,6 @@ jobs:
         fetchDepth: 0
         persistCredentials: true
       - task: QodanaScan@2026
-        displayName: Qodana Scan
         env:
           QODANA_TOKEN: $(QODANA_TOKEN)
         inputs:
@@ -89,9 +104,10 @@ jobs:
           postPrComment: "true"
           args: "--log-level debug"
 
-  # E-2: postPrComment=false — no comment posted to the PR
+  # E2: postPrComment=false — no comment
   - job: E2_no_pr_comment
     displayName: "E-2: postPrComment=false"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/qodana-test')
     pool:
       vmImage: ubuntu-latest
     steps:
@@ -99,7 +115,6 @@ jobs:
         fetchDepth: 0
         persistCredentials: true
       - task: QodanaScan@2026
-        displayName: Qodana Scan
         env:
           QODANA_TOKEN: $(QODANA_TOKEN)
         inputs:
@@ -107,9 +122,15 @@ jobs:
           postPrComment: "false"
           args: "--log-level debug"
 
-  # F-1: pushFixes=none (default) — no commits pushed to the branch
-  - job: F1_push_fixes_none
-    displayName: "F-1: pushFixes=none (default)"
+  # ── pushFixes → branch ─────────────────────────────────────────────────
+  # Each job runs only when its dedicated fixture branch triggers the build.
+  # The test pushes Fixable.java (unused import) before triggering, ensuring
+  # there is always a fixable issue in the PR diff.
+
+  # F2: pushFixes=branch via --apply-fixes CLI flag
+  - job: F2_push_fixes_branch_apply_fixes
+    displayName: "F-2: pushFixes=branch, --apply-fixes"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/branch-apply-fixes')
     pool:
       vmImage: ubuntu-latest
     steps:
@@ -117,9 +138,158 @@ jobs:
         fetchDepth: 0
         persistCredentials: true
       - task: QodanaScan@2026
-        displayName: Qodana Scan
         env:
           QODANA_TOKEN: $(QODANA_TOKEN)
         inputs:
-          pushFixes: "none"
+          prMode: "true"
+          pushFixes: "branch"
           args: "--apply-fixes --log-level debug"
+
+  # F3: pushFixes=branch via --cleanup CLI flag
+  - job: F3_push_fixes_branch_cleanup
+    displayName: "F-3: pushFixes=branch, --cleanup"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/branch-cleanup')
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          pushFixes: "branch"
+          args: "--cleanup --log-level debug"
+
+  # F4: pushFixes=branch via fixesStrategy=apply in qodana.yaml
+  - job: F4_push_fixes_branch_strategy_apply
+    displayName: "F-4: pushFixes=branch, fixesStrategy=apply (qodana.yaml)"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/branch-yaml-apply')
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          pushFixes: "branch"
+          args: "--config qodana-apply.yaml --log-level debug"
+
+  # F5: pushFixes=branch via fixesStrategy=cleanup in qodana.yaml
+  - job: F5_push_fixes_branch_strategy_cleanup
+    displayName: "F-5: pushFixes=branch, fixesStrategy=cleanup (qodana.yaml)"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/branch-yaml-cleanup')
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          pushFixes: "branch"
+          args: "--config qodana-cleanup.yaml --log-level debug"
+
+  # ── pushFixes → pull-request ──────────────────────────────────────────
+
+  # F6: pushFixes=pull-request via --apply-fixes
+  - job: F6_push_fixes_pr_apply_fixes
+    displayName: "F-6: pushFixes=pull-request, --apply-fixes"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/pr-apply-fixes')
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          pushFixes: "pull-request"
+          args: "--apply-fixes --log-level debug"
+
+  # F7: pushFixes=pull-request via --cleanup
+  - job: F7_push_fixes_pr_cleanup
+    displayName: "F-7: pushFixes=pull-request, --cleanup"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/pr-cleanup')
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          pushFixes: "pull-request"
+          args: "--cleanup --log-level debug"
+
+  # F8: pushFixes=pull-request via fixesStrategy=apply in qodana.yaml
+  - job: F8_push_fixes_pr_strategy_apply
+    displayName: "F-8: pushFixes=pull-request, fixesStrategy=apply (qodana.yaml)"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/pr-yaml-apply')
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          pushFixes: "pull-request"
+          args: "--config qodana-apply.yaml --log-level debug"
+
+  # F9: pushFixes=pull-request via fixesStrategy=cleanup in qodana.yaml
+  - job: F9_push_fixes_pr_strategy_cleanup
+    displayName: "F-9: pushFixes=pull-request, fixesStrategy=cleanup (qodana.yaml)"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/pr-yaml-cleanup')
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          pushFixes: "pull-request"
+          args: "--config qodana-cleanup.yaml --log-level debug"
+
+  # ── commitMessage ─────────────────────────────────────────────────────
+
+  # F10: custom commitMessage
+  - job: F10_custom_commit_message
+    displayName: "F-10: custom commitMessage"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/branch-apply-fixes')
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+      - task: QodanaScan@2026
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: "true"
+          pushFixes: "branch"
+          args: "--apply-fixes"
+          commitMessage: "My custom fix [skip ci]"

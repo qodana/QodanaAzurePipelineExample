@@ -1,0 +1,7 @@
+version: 1.0
+linter: jetbrains/qodana-jvm
+fixesStrategy: cleanup
+profile:
+  name: qodana.starter
+include:
+  - name: UnusedImport

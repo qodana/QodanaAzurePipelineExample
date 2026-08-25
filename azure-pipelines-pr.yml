@@ -15,7 +15,51 @@ pr:
 trigger: none
 
 jobs:
-  # ── prMode analysis scope ──────────────────────────────────────────────
+  # ── Parameterized job (reads test-pr-inputs.json) ─────────────────────
+  # Used by automated E2E tests: the test runner pushes test-pr-inputs.json
+  # with the specific inputs for each scenario, then awaits this job.
+
+  - job: PR_parameterized
+    displayName: "PR Parameterized Test"
+    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/parameterized')
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+      - checkout: self
+        fetchDepth: 0
+        persistCredentials: true
+
+      - bash: |
+          # Initialize all optional QodanaScan inputs to empty string.
+          # Uninitialized vars would expand as literal $(VAR) in task inputs.
+          echo "##vso[task.setvariable variable=INPUT_PRMODE]"
+          echo "##vso[task.setvariable variable=INPUT_POSTPRCOMMENT]"
+          echo "##vso[task.setvariable variable=INPUT_PUSHFIXES]"
+          echo "##vso[task.setvariable variable=INPUT_ARGS]"
+          echo "##vso[task.setvariable variable=INPUT_COMMITMESSAGE]"
+          # Override with values from test-pr-inputs.json
+          if [ -f test-pr-inputs.json ]; then
+            python3 -c "
+          import json
+          with open('test-pr-inputs.json') as f:
+              inputs = json.load(f)
+          for k, v in inputs.items():
+              print(f'##vso[task.setvariable variable=INPUT_{k.upper()}]{v}')
+          "
+          fi
+        displayName: "Parse test-pr-inputs.json"
+
+      - task: QodanaScan@2026
+        env:
+          QODANA_TOKEN: $(QODANA_TOKEN)
+        inputs:
+          prMode: $(INPUT_PRMODE)
+          postPrComment: $(INPUT_POSTPRCOMMENT)
+          pushFixes: $(INPUT_PUSHFIXES)
+          args: $(INPUT_ARGS)
+          commitMessage: $(INPUT_COMMITMESSAGE)
+
+  # ── prMode analysis scope (legacy fixture branches) ────────────────────
 
   # D3: prMode=true (default) — triggered from pr-fixture/qodana-test
   - job: D3_prMode_true
@@ -123,9 +167,6 @@ jobs:
           args: "--log-level debug"
 
   # ── pushFixes → branch ─────────────────────────────────────────────────
-  # Each job runs only when its dedicated fixture branch triggers the build.
-  # The test pushes Fixable.java (unused import) before triggering, ensuring
-  # there is always a fixable issue in the PR diff.
 
   # F2: pushFixes=branch via --apply-fixes CLI flag
   - job: F2_push_fixes_branch_apply_fixes

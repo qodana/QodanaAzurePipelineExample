@@ -12,7 +12,7 @@ trigger: none
 jobs:
   - job: PR_parameterized
     displayName: PR_parameterized
-    condition: contains(variables['System.PullRequest.SourceBranch'], 'pr-fixture/parameterized')
+    condition: and(not(canceled()), contains(variables['System.PullRequest.SourceBranch'], 'pr-fixture/parameterized'))
     pool:
       vmImage: ubuntu-latest
     steps:

@@ -30,31 +30,28 @@ jobs:
         persistCredentials: true
 
       - bash: |
-          # Initialize all optional QodanaScan inputs to empty string.
-          # Uninitialized vars would expand as literal $(VAR) in task inputs.
-          echo "##vso[task.setvariable variable=INPUT_PRMODE]"
-          echo "##vso[task.setvariable variable=INPUT_POSTPRCOMMENT]"
-          echo "##vso[task.setvariable variable=INPUT_PUSHFIXES]"
-          echo "##vso[task.setvariable variable=INPUT_ARGS]"
-          echo "##vso[task.setvariable variable=INPUT_COMMITMESSAGE]"
-          # Override with values from test-pr-inputs.json
-          if [ -f test-pr-inputs.json ]; then
-            python3 -c "
-          import json
-          with open('test-pr-inputs.json') as f:
-              inputs = json.load(f)
-          for k, v in inputs.items():
-              print(f'##vso[task.setvariable variable=INPUT_{k.upper()}]{v}')
-          "
-          fi
-          # Show resolved values in the build name and step log
-          echo "##vso[build.updatebuildnumber]PR prMode=$(INPUT_PRMODE) pushFixes=$(INPUT_PUSHFIXES) args=$(INPUT_ARGS)"
+          # Read each input from test-pr-inputs.json into bash variables (default empty).
+          # $(VAR) is Azure macro syntax — not valid inside bash. Use $VAR here.
+          read_input() { [ -f test-pr-inputs.json ] && python3 -c "import json; d=json.load(open('test-pr-inputs.json')); print(d.get('$1',''),end='')" || true; }
+          INPUT_PRMODE=$(read_input prMode)
+          INPUT_POSTPRCOMMENT=$(read_input postPrComment)
+          INPUT_PUSHFIXES=$(read_input pushFixes)
+          INPUT_ARGS=$(read_input args)
+          INPUT_COMMITMESSAGE=$(read_input commitMessage)
+          # Export as Azure DevOps pipeline variables for the QodanaScan task
+          echo "##vso[task.setvariable variable=INPUT_PRMODE]$INPUT_PRMODE"
+          echo "##vso[task.setvariable variable=INPUT_POSTPRCOMMENT]$INPUT_POSTPRCOMMENT"
+          echo "##vso[task.setvariable variable=INPUT_PUSHFIXES]$INPUT_PUSHFIXES"
+          echo "##vso[task.setvariable variable=INPUT_ARGS]$INPUT_ARGS"
+          echo "##vso[task.setvariable variable=INPUT_COMMITMESSAGE]$INPUT_COMMITMESSAGE"
+          # Update build name and log resolved values
+          echo "##vso[build.updatebuildnumber]PR prMode=$INPUT_PRMODE pushFixes=$INPUT_PUSHFIXES args=$INPUT_ARGS"
           echo "##[group]Resolved QodanaScan inputs"
-          echo "  prMode:        $(INPUT_PRMODE)"
-          echo "  postPrComment: $(INPUT_POSTPRCOMMENT)"
-          echo "  pushFixes:     $(INPUT_PUSHFIXES)"
-          echo "  args:          $(INPUT_ARGS)"
-          echo "  commitMessage: $(INPUT_COMMITMESSAGE)"
+          echo "  prMode:        $INPUT_PRMODE"
+          echo "  postPrComment: $INPUT_POSTPRCOMMENT"
+          echo "  pushFixes:     $INPUT_PUSHFIXES"
+          echo "  args:          $INPUT_ARGS"
+          echo "  commitMessage: $INPUT_COMMITMESSAGE"
           echo "##[endgroup]"
         displayName: "Parse test-pr-inputs.json"
 

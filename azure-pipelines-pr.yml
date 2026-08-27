@@ -48,7 +48,7 @@ jobs:
           "
           fi
           # Show resolved values in the build name and step log
-          echo "##vso[build.updatebuildnumber]PR: prMode=$(INPUT_PRMODE) pushFixes=$(INPUT_PUSHFIXES) args=$(INPUT_ARGS)"
+          echo "##vso[build.updatebuildnumber]PR prMode=$(INPUT_PRMODE) pushFixes=$(INPUT_PUSHFIXES) args=$(INPUT_ARGS)"
           echo "##[group]Resolved QodanaScan inputs"
           echo "  prMode:        $(INPUT_PRMODE)"
           echo "  postPrComment: $(INPUT_POSTPRCOMMENT)"

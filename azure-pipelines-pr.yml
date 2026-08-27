@@ -1,8 +1,11 @@
 # PR-triggered fixture pipeline for QodanaScan extension E2E tests (QD-15726).
 #
-# Triggered automatically when the pr-fixture/parameterized branch targets master.
-# The test runner pushes test-pr-inputs.json with QodanaScan inputs for each scenario,
-# then waits for the PR_parameterized job to complete.
+# Triggered by Branch Policy when pr-fixture/parameterized targets master.
+# The test runner pushes test-pr-inputs.json with QodanaScan inputs for each
+# scenario, then waits for the PR_parameterized job to complete.
+#
+# Only runs QodanaScan when test-pr-inputs.json was modified in the trigger
+# commit — skips fix commits pushed back by Qodana to prevent re-trigger loop.
 #
 # QODANA_TOKEN must be configured as a secret variable on this pipeline.
 # persistCredentials: true enables postPrComment and pushFixes git operations.
@@ -21,21 +24,29 @@ jobs:
         persistCredentials: true
 
       - bash: |
-          # Read each input from test-pr-inputs.json into bash variables (default empty).
-          # $(VAR) is Azure macro syntax — not valid inside bash. Use $VAR here.
+          # Only run Qodana for test-initiated commits (those that modify test-pr-inputs.json).
+          # Qodana fix commits touch only source files — skipping them prevents the re-trigger loop.
+          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "test-pr-inputs.json"; then
+            echo "##vso[task.setvariable variable=IS_TEST_COMMIT]true"
+            echo "Test commit detected — will run QodanaScan"
+          else
+            echo "##vso[task.setvariable variable=IS_TEST_COMMIT]false"
+            echo "Not a test commit (test-pr-inputs.json unchanged) — skipping QodanaScan"
+          fi
+        displayName: "Detect test commit"
+
+      - bash: |
           read_input() { [ -f test-pr-inputs.json ] && python3 -c "import json; d=json.load(open('test-pr-inputs.json')); print(d.get('$1',''),end='')" || true; }
           INPUT_PRMODE=$(read_input prMode)
           INPUT_POSTPRCOMMENT=$(read_input postPrComment)
           INPUT_PUSHFIXES=$(read_input pushFixes)
           INPUT_ARGS=$(read_input args)
           INPUT_COMMITMESSAGE=$(read_input commitMessage)
-          # Export as Azure DevOps pipeline variables for the QodanaScan task
           echo "##vso[task.setvariable variable=INPUT_PRMODE]$INPUT_PRMODE"
           echo "##vso[task.setvariable variable=INPUT_POSTPRCOMMENT]$INPUT_POSTPRCOMMENT"
           echo "##vso[task.setvariable variable=INPUT_PUSHFIXES]$INPUT_PUSHFIXES"
           echo "##vso[task.setvariable variable=INPUT_ARGS]$INPUT_ARGS"
           echo "##vso[task.setvariable variable=INPUT_COMMITMESSAGE]$INPUT_COMMITMESSAGE"
-          # Update build name and log resolved values
           echo "##vso[build.updatebuildnumber]PR prMode=$INPUT_PRMODE pushFixes=$INPUT_PUSHFIXES args=$INPUT_ARGS"
           echo "##[group]Resolved QodanaScan inputs"
           echo "  prMode:        $INPUT_PRMODE"
@@ -44,9 +55,11 @@ jobs:
           echo "  args:          $INPUT_ARGS"
           echo "  commitMessage: $INPUT_COMMITMESSAGE"
           echo "##[endgroup]"
+        condition: eq(variables['IS_TEST_COMMIT'], 'true')
         displayName: "Parse test-pr-inputs.json"
 
       - task: QodanaScan@2026
+        condition: and(succeeded(), eq(variables['IS_TEST_COMMIT'], 'true'))
         env:
           QODANA_TOKEN: $(QODANA_TOKEN)
         inputs:

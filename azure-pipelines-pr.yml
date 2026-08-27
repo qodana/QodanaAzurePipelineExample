@@ -21,7 +21,7 @@ jobs:
 
   - job: PR_parameterized
     displayName: "PR Parameterized Test"
-    condition: eq(variables['System.PullRequest.SourceBranch'], 'refs/heads/pr-fixture/parameterized')
+    condition: contains(variables['System.PullRequest.SourceBranch'], 'pr-fixture/parameterized')
     pool:
       vmImage: ubuntu-latest
     steps:

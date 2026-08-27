@@ -20,7 +20,7 @@ jobs:
   # with the specific inputs for each scenario, then awaits this job.
 
   - job: PR_parameterized
-    displayName: "PR Parameterized Test"
+    displayName: PR_parameterized
     condition: contains(variables['System.PullRequest.SourceBranch'], 'pr-fixture/parameterized')
     pool:
       vmImage: ubuntu-latest

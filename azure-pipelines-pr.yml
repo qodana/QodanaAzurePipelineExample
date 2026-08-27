@@ -47,6 +47,15 @@ jobs:
               print(f'##vso[task.setvariable variable=INPUT_{k.upper()}]{v}')
           "
           fi
+          # Show resolved values in the build name and step log
+          echo "##vso[build.updatebuildnumber]PR: prMode=$(INPUT_PRMODE) pushFixes=$(INPUT_PUSHFIXES) args=$(INPUT_ARGS)"
+          echo "##[group]Resolved QodanaScan inputs"
+          echo "  prMode:        $(INPUT_PRMODE)"
+          echo "  postPrComment: $(INPUT_POSTPRCOMMENT)"
+          echo "  pushFixes:     $(INPUT_PUSHFIXES)"
+          echo "  args:          $(INPUT_ARGS)"
+          echo "  commitMessage: $(INPUT_COMMITMESSAGE)"
+          echo "##[endgroup]"
         displayName: "Parse test-pr-inputs.json"
 
       - task: QodanaScan@2026

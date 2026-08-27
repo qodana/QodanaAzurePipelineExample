@@ -7,11 +7,6 @@
 # QODANA_TOKEN must be configured as a secret variable on this pipeline.
 # persistCredentials: true enables postPrComment and pushFixes git operations.
 
-pr:
-  branches:
-    include:
-      - master
-
 trigger: none
 
 jobs:
